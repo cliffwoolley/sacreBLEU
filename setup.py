@@ -52,7 +52,7 @@ setup(
 
     license = 'Apache License 2.0',
 
-    python_requires = '>=3',
+    python_requires = '>=2.7',
 
     # See https://pypi.python.org/pypi?%3Aaction=list_classifiers
     classifiers = [
