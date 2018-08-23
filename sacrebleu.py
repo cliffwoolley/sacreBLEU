@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 # Copyright 2017--2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
@@ -22,6 +22,7 @@ It also knows all the standard test sets and handles downloading, processing, an
 See the [README.md] file for more information.
 """
 
+from __future__ import print_function
 import argparse
 import gzip
 import logging
@@ -29,9 +30,9 @@ import io
 import os
 import re
 import sys
-import urllib.request
+from urllib2 import Request
 from collections import Counter, namedtuple
-from itertools import zip_longest
+from itertools import izip_longest
 from typing import List, Iterable, Tuple
 
 import math
@@ -529,8 +530,8 @@ class UnicodeRegex:
 
     without dependening on https://pypi.python.org/pypi/regex/."""
     def _property_chars(prefix):
-        return ''.join(chr(x) for x in range(sys.maxunicode)
-                       if unicodedata.category(chr(x)).startswith(prefix))
+        return ''.join(unicode(chr(x)) for x in range(sys.maxunicode)
+                       if unicodedata.category(unicode(chr(x))).startswith(prefix))
     punctuation = _property_chars('P')
     nondigit_punct_re = re.compile(r'([^\d])([' + punctuation + r'])')
     punct_nondigit_re = re.compile(r'([' + punctuation + r'])([^\d])')
@@ -783,7 +784,7 @@ def chrf_signature(args, numrefs):
     return sigstr
 
 
-def extract_ngrams(line, min_order=1, max_order=NGRAM_ORDER) -> Counter:
+def extract_ngrams(line, min_order=1, max_order=NGRAM_ORDER):
     """Extracts all the ngrams (1 <= n <= NGRAM_ORDER) from a sequence of tokens.
 
     :param line: a segment containing a sequence of words
@@ -799,13 +800,15 @@ def extract_ngrams(line, min_order=1, max_order=NGRAM_ORDER) -> Counter:
             ngrams[ngram] += 1
 
     return ngrams
+extract_ngrams.__annotations__ = {'return': Counter}
 
 
-def extract_char_ngrams(s: str, n: int) -> Counter:
+def extract_char_ngrams(s, n):
     """
     Yields counts of character n-grams from string s of order n.
     """
     return Counter([s[i:i + n] for i in range(len(s) - n + 1)])
+extract_char_ngrams.__annotations__ = {'s': str, 'n': int, 'return': Counter}
 
 
 def ref_stats(output, refs):
@@ -900,7 +903,7 @@ def download_test_set(test_set, langpair=None):
             # TODO: check MD5sum
             logging.info("Downloading %s to %s", dataset, tarball)
             try:
-                with urllib.request.urlopen(dataset) as f, open(tarball, 'wb') as out:
+                with Request.urlopen(dataset) as f, open(tarball, 'wb') as out:
                     out.write(f.read())
             except ssl.SSLError:
                 log.warning('An SSL error was encountered in downloading the files. If you\'re on a Mac, '
@@ -948,8 +951,8 @@ def download_test_set(test_set, langpair=None):
 BLEU = namedtuple('BLEU', 'score, counts, totals, precisions, bp, sys_len, ref_len')
 
 
-def compute_bleu(correct: List[int], total: List[int], sys_len: int, ref_len: int, smooth = 'none', smooth_floor = 0.01,
-                 use_effective_order = False) -> BLEU:
+def compute_bleu(correct, total, sys_len, ref_len, smooth = 'none', smooth_floor = 0.01,
+                 use_effective_order = False):
     """Computes BLEU score from its sufficient statistics. Adds smoothing.
 
     :param correct: List of counts of correct ngrams, 1 <= n <= NGRAM_ORDER
@@ -994,10 +997,11 @@ def compute_bleu(correct: List[int], total: List[int], sys_len: int, ref_len: in
     bleu = brevity_penalty * math.exp(sum(map(my_log, precisions[:effective_order])) / effective_order)
 
     return BLEU._make([bleu, correct, total, precisions, brevity_penalty, sys_len, ref_len])
+compute_bleu.__annotations__ = {'correct': List[int], 'total': List[int], 'sys_len': int, 'ref_len': int, 'return': BLEU}
 
 
 def corpus_bleu(sys_stream, ref_streams, smooth='exp', smooth_floor=0.0, force=False, lowercase=False,
-                tokenize=DEFAULT_TOKENIZER, use_effective_order=False) -> BLEU:
+                tokenize=DEFAULT_TOKENIZER, use_effective_order=False):
     """Produces BLEU scores along with its sufficient statistics from a source against one or more references.
 
     :param sys_stream: The system stream (a sequence of segments)
@@ -1041,7 +1045,9 @@ def corpus_bleu(sys_stream, ref_streams, smooth='exp', smooth_floor=0.0, force=F
                 logging.warning('It looks like you forgot to detokenize your test data, which may hurt your score.')
                 logging.warning('If you insist your data is detokenized, or don\'t care, you can suppress this message with \'--force\'.')
 
-        output, *refs = [TOKENIZERS[tokenize](x.rstrip()) for x in lines]
+        temp = [TOKENIZERS[tokenize](x.rstrip()) for x in lines]
+        output = temp[0]
+        refs = temp[1:]
 
         ref_ngrams, closest_diff, closest_len = ref_stats(output, refs)
 
@@ -1055,9 +1061,10 @@ def corpus_bleu(sys_stream, ref_streams, smooth='exp', smooth_floor=0.0, force=F
             total[n-1] += sys_ngrams[ngram]
 
     return compute_bleu(correct, total, sys_len, ref_len, smooth, smooth_floor, use_effective_order)
+corpus_bleu.__annotations__ = {'return': BLEU}
 
 
-def raw_corpus_bleu(sys_stream, ref_streams, smooth_floor=0.01) -> BLEU:
+def raw_corpus_bleu(sys_stream, ref_streams, smooth_floor=0.01):
     """Convenience function that wraps corpus_bleu().
     This is convenient if you're using sacrebleu as a library, say for scoring on dev.
     It uses no tokenization and 'floor' smoothing, with the floor default to 0 (no smoothing).
@@ -1066,19 +1073,21 @@ def raw_corpus_bleu(sys_stream, ref_streams, smooth_floor=0.01) -> BLEU:
     :param ref_streams: a list of one or more reference streams (each a sequence of segments)
     """
     return corpus_bleu(sys_stream, ref_streams, smooth='floor', smooth_floor=smooth_floor, force=True, tokenize='none', use_effective_order=True)
+raw_corpus_bleu.__annotations__ = {'return': BLEU}
 
 
-def delete_whitespace(text: str) -> str:
+def delete_whitespace(text):
     """
     Removes whitespaces from text.
     """
     return re.sub(r'\s+', '', text).strip()
+delete_whitespace.__annotations__ = {'text': str, 'return': str}
 
 
-def get_sentence_statistics(hypothesis: str,
-                            reference: str,
-                            order: int = CHRF_ORDER,
-                            remove_whitespace: bool = True) -> List[float]:
+def get_sentence_statistics(hypothesis,
+                            reference,
+                            order = CHRF_ORDER,
+                            remove_whitespace = True):
     hypothesis = delete_whitespace(hypothesis) if remove_whitespace else hypothesis
     reference = delete_whitespace(reference) if remove_whitespace else reference
     statistics = [0] * (order * 3)
@@ -1091,21 +1100,23 @@ def get_sentence_statistics(hypothesis: str,
         statistics[3 * i + 1] = sum(reference_ngrams.values())
         statistics[3 * i + 2] = sum(common_ngrams.values())
     return statistics
+get_sentence_statistics.__annotations__ = {'hypothesis': str, 'reference': str, 'order': int, 'remove_whitespace': bool, 'return': List[float]}
 
 
-def get_corpus_statistics(hypotheses: Iterable[str],
-                          references: Iterable[str],
-                          order: int = CHRF_ORDER,
-                          remove_whitespace: bool = True) -> List[float]:
+def get_corpus_statistics(hypotheses,
+                          references,
+                          order = CHRF_ORDER,
+                          remove_whitespace = True):
     corpus_statistics = [0] * (order * 3)
     for hypothesis, reference in zip(hypotheses, references):
         statistics = get_sentence_statistics(hypothesis, reference, order=order, remove_whitespace=remove_whitespace)
         for i in range(len(statistics)):
             corpus_statistics[i] += statistics[i]
     return corpus_statistics
+get_corpus_statistics.__annotations__ = {'hypotheses': Iterable[str], 'references': Iterable[str], 'order': int, 'remove_whitespace': bool, 'return': List[float]}
 
 
-def _avg_precision_and_recall(statistics: List[float], order: int) -> Tuple[float, float]:
+def _avg_precision_and_recall(statistics, order):
     avg_precision = 0.0
     avg_recall = 0.0
     effective_order = 0
@@ -1122,21 +1133,23 @@ def _avg_precision_and_recall(statistics: List[float], order: int) -> Tuple[floa
     avg_precision /= effective_order
     avg_recall /= effective_order
     return avg_precision, avg_recall
+_avg_precision_and_recall.__annotations__ = {'statistics': List[float], 'order': int, 'return': Tuple[float, float]}
 
 
-def _chrf(avg_precision, avg_recall, beta: int = CHRF_BETA) -> float:
+def _chrf(avg_precision, avg_recall, beta = CHRF_BETA):
     if avg_precision + avg_recall == 0:
         return 0.0
     beta_square = beta ** 2
     score = (1 + beta_square) * (avg_precision * avg_recall) / ((beta_square * avg_precision) + avg_recall)
     return score
+_chrf.__annotations__ = {'beta': int, 'return': float}
 
 
-def corpus_chrf(hypotheses: Iterable[str],
-                references: Iterable[str],
-                order: int = CHRF_ORDER,
-                beta: float = CHRF_BETA,
-                remove_whitespace: bool = True) -> float:
+def corpus_chrf(hypotheses,
+                references,
+                order = CHRF_ORDER,
+                beta = CHRF_BETA,
+                remove_whitespace = True):
     """
     Computes Chrf on a corpus.
 
@@ -1150,13 +1163,14 @@ def corpus_chrf(hypotheses: Iterable[str],
     corpus_statistics = get_corpus_statistics(hypotheses, references, order=order, remove_whitespace=remove_whitespace)
     avg_precision, avg_recall = _avg_precision_and_recall(corpus_statistics, order)
     return _chrf(avg_precision, avg_recall, beta=beta)
+corpus_chrf.__annotations__ = {'hypotheses': Iterable[str], 'references': Iterable[str], 'order': int, 'beta': float, 'remove_whitespace': bool, 'return': float}
 
 
-def sentence_chrf(hypothesis: str,
-                  reference: str,
-                  order: int = CHRF_ORDER,
-                  beta: float = CHRF_BETA,
-                  remove_whitespace: bool = True) -> float:
+def sentence_chrf(hypothesis,
+                  reference,
+                  order = CHRF_ORDER,
+                  beta = CHRF_BETA,
+                  remove_whitespace = True):
     """
     Computes ChrF on a single sentence pair.
 
@@ -1170,6 +1184,7 @@ def sentence_chrf(hypothesis: str,
     statistics = get_sentence_statistics(hypothesis, reference, order=order, remove_whitespace=remove_whitespace)
     avg_precision, avg_recall = _avg_precision_and_recall(statistics, order)
     return _chrf(avg_precision, avg_recall, beta=beta)
+sentence_chrf.__annotations__ = {'hypothesis': str, 'reference': str, 'order': int, 'beta': float, 'remove_whitespace': bool, 'return': float}
 
 
 def main():
@@ -1278,7 +1293,9 @@ def main():
                         "your own reference tokenization. Published numbers will not be comparable with other papers.\n")
 
     if args.test_set:
-        _, *refs = download_test_set(args.test_set, args.langpair)
+        temp = download_test_set(args.test_set, args.langpair)
+        _ = temp[0]
+        refs = temp[1:]
         if len(refs) == 0:
             print('No references found for test set {}/{}.'.format(args.test_set, args.langpair))
             sys.exit(1)
