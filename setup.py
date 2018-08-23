@@ -25,10 +25,11 @@ See:
 from setuptools import setup
 import re
 import os
+import io
 
 def get_version():
     VERSION_RE = re.compile(r'''VERSION\s+=\s+['"]([0-9.]+)['"]''')
-    with open(os.path.join(os.path.dirname(__file__), 'sacrebleu.py'), encoding='utf-8') as fin:
+    with io.open(os.path.join(os.path.dirname(__file__), 'sacrebleu.py'), encoding='utf-8') as fin:
         return VERSION_RE.search(fin.read()).group(1)
 
 setup(
